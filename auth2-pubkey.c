@@ -251,6 +251,92 @@ user_key_allowed2(struct passwd *pw, Key *key, char *file)
 	return found_key;
 }
 
+/* check to see if the script specified by file can authorize the key
+ *
+ * the script will receive as arguments, either:
+ *
+ *    rsa key->rsa->e key->rsa->n
+ *    dsa key->dsa->p key->dsa->q key->dsa->g key->dsa->pub_key
+ *
+ * all key values are bignums which will be printed to hexadecimal
+ *
+ * the script must exit with either 0 for success or 1 for failure.
+ * the script can print login options (if any) to STDOUT, followed by a single newline.
+ *
+ * Use with caution: the script can hang sshd. It is recommended you code the script
+ * with a timeout set if it cannot determine authenication quickly.
+ */
+static int
+user_key_found_by_script(struct passwd *pw, Key *key, char *file)
+{
+	pid_t pid;
+	char line[SSH_MAX_PUBKEY_BYTES];
+	int pipe_out[2];
+	int exit_code = 1;
+	int success = 0;
+	//mysig_t oldsig;
+
+	pipe(pipe_out);
+
+	//oldsig = signal(SIGCHLD, SIG_IGN);
+
+	temporarily_use_uid(pw);
+
+	debug3("user_key_found_by_script: executing %s", file);
+
+	switch ((pid = fork())) {
+	case -1:
+		error("fork(): %s", strerror(errno));
+		restore_uid();
+		return (-1);
+	case 0:
+		/* setup output pipe */
+		close(0);
+		close(pipe_out[0]);
+		dup2(pipe_out[1], 1);
+		close(pipe_out[1]);
+
+		/* BN_bn2hex allocates a string, but we cant free it anyway */
+		switch(key->type) {
+		case KEY_RSA1:
+		case KEY_RSA:
+			execl(file, file, "rsa", BN_bn2hex(key->rsa->e),
+				BN_bn2hex(key->rsa->n), NULL);
+		case KEY_DSA:
+			execl(file, file, "dsa", BN_bn2hex(key->dsa->p),
+				BN_bn2hex(key->dsa->q), BN_bn2hex(key->dsa->g),
+				BN_bn2hex(key->dsa->pub_key), NULL);
+		}
+
+		/* exec failed */
+		error("execl(): %s", strerror(errno));
+		_exit(1);
+	default:
+		debug3("user_key_found_by_script: script pid %d", pid);
+
+		close(pipe_out[1]);
+
+		if (waitpid(pid, &exit_code, 0) < 0) {
+			error("waitpid(): %s", strerror(errno));
+		}
+		else if (WIFEXITED(exit_code) && WEXITSTATUS(exit_code) == 0) {
+			int amt_read = read(pipe_out[0], line, sizeof(line) - 1);
+			line[amt_read] = ' ';
+			line[amt_read + 1] = 0;
+			debug3("user_key_found_by_script: options: %s", line);
+			if (auth_parse_options(pw, line, file, 0) == 1)
+				success = 1;
+		}
+
+		close(pipe_out[0]);
+	}
+
+	restore_uid();
+	//signal(SIGCHLD, oldsig);
+
+	return success;
+}
+
 /* check whether given key is in .ssh/authorized_keys* */
 int
 user_key_allowed(struct passwd *pw, Key *key)
@@ -268,6 +354,15 @@ user_key_allowed(struct passwd *pw, Key *key)
 	file = authorized_keys_file2(pw);
 	success = user_key_allowed2(pw, key, file);
 	xfree(file);
+	if (success)
+		return success;
+
+	/* try the script to find the key */
+	if ((file = authorized_keys_script(pw))) {
+		success = user_key_found_by_script(pw, key, file);
+		xfree(file);
+	}
+
 	return success;
 }
 
