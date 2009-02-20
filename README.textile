@@ -39,4 +39,4 @@ h2. To-do
 
 h2. License
 
-The modifications are released under the BSD license and/or the same license as openssh (see the LICENSE file in the project).
+The modifications are released under the BSD license.
