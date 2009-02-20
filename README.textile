@@ -1,0 +1,42 @@
+h1. OpenSSH for git
+
+The primary goal of this patch/hack is to enable public key lookups via a method other than the @authorized_keys@ file. We wanted it to be flexible, so the patch executes a 3rd party program or script. This way, you can implement your public key lookups in any language backed by any dataset - Ruby, Perl, Python, bash, MySQL, Postgres, CouchDB, etc. Our motivation to write this patch is to support large git repositories, but other creative uses may come about.
+
+h2. Auditing
+
+We welcome audits and improvements to the code (we're not expert C hackers). You can view the entire patch as a diff between the first commit and the HEAD commit. The original commit is simply openssh-5.1p1 with an additional .gitignore file.
+
+h2. Security
+
+It should be said that it is unwise to do this; in addition to trusting a script you write with user authentication, the patch is written by some guy in <strike>his parent's basement</strike> Boston who, while obviously extremely awesome, does not trust himself with the security of your server. If you're going to run this hack, it is recommended you run this in a @chroot@ jail. As such, we *strongly advise against using this patched version of sshd for the main sshd on your server* - run a normal install of sshd on a non-standard port.
+
+In summary: <ins>*USE THIS PATCH AT YOUR OWN RISK.*</ins>
+
+h2. Setup and Configuration
+
+In order to do so, we added an optional @AuthorizedKeysScript@ option to your @sshd_config@. The format and functionality is identical to @AuthorizedKeysFile@, except the path will reference a program instead of a flatfile. The value I use is @.ssh/authorized_keys_script@.
+
+h2. Writing the Program/Script
+
+The script must follow certain guidelines in order for this to work properly. First, your program will receive command line arguments in order to authenticate the user. These values are one of:
+
+* @rsa key->rsa->e key->rsa->n@
+* @dsa key->dsa->p key->dsa->q key->dsa->g key->dsa->pub_key@
+
+Where the first value ("rsa" or "dsa") is a simple string to let you know the format, and the rest of the values are hexadecimal representations of the parts of the key as printed by @BN_bn2hex@.
+
+Your program's exit code is the most important output from your script. *An exit code of 0 means success, while 1 means failure.* Success allows the user to login with that key. It is thus <ins>*VERY important*</ins> that your script does not blindly exit with a code of 0, or the user will be able to login as the user.
+
+Your script has the option of outputting ssh options in the same format as @authorized_keys@. These options are printed to standard out. You must print only the options without any whitespace or newlines at the end (i.e., in Ruby, use @print@ not @puts@). A valid option string might be @command="gitosis-serve jd",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty@. Outputting invalid options (or a newline) will result in the user's key being rejected, regardless of your exit code. Lastly, your scripts output will be entirely ignored if the exit code is not 0.
+
+You should write your script to timeout and exit (with a status code of 1) after some number of seconds, otherwise the sshd session will hang waiting for your script to return. This should not affect the overall sshd daemon, but might leave forked sessions hung, requiring sshd to be restarted.
+
+h2. To-do
+
+* SIGCHLD confirmation - is the current handling of SIGCHLD ok?
+* Add a timeout to assure the script does not permanently hang the sshd session. If timeout occurs, kill the child process.
+* Make the options output handling a bit less sensitive, e.g. handle if a newline is printed.
+
+h2. License
+
+The modifications are released under the BSD license and/or the same license as openssh (see the LICENSE file in the project).
