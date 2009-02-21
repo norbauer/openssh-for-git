@@ -4,7 +4,7 @@ The primary goal of this patch/hack is to enable public key lookups via a method
 
 h2. Auditing
 
-We welcome audits and improvements to the code (we're not expert C hackers). You can view the entire patch as a diff between the first commit and the HEAD commit. The original commit is simply openssh-5.1p1 with an additional .gitignore file.
+We welcome audits and improvements to the patch (we're not expert C hackers). The @openssh-5.1p1@ branch is openssh-5.1p1 with the patch applied. The original commit in this branch is openssh-5.1p1 with an additional .gitignore file.
 
 h2. Security
 
@@ -18,16 +18,13 @@ In order to do so, we added an optional @AuthorizedKeysScript@ option to your @s
 
 h2. Writing the Program/Script
 
-The script must follow certain guidelines in order for this to work properly. First, your program will receive command line arguments in order to authenticate the user. These values are one of:
+The script must follow certain guidelines in order for this to work properly.
 
-* @rsa key->rsa->e key->rsa->n@
-* @dsa key->dsa->p key->dsa->q key->dsa->g key->dsa->pub_key@
-
-Where the first value ("rsa" or "dsa") is a simple string to let you know the format, and the rest of the values are hexadecimal representations of the parts of the key as printed by @BN_bn2hex@.
+Your program will receive the public key on STDIN, and is terminated by EOF. It will be in canoncial SSH public key format, starting with @ssh-dss@ or @ssh-rsa@, a space, and then the key data. The user@hostname identifier is not included.
 
 Your program's exit code is the most important output from your script. *An exit code of 0 means success, while 1 means failure.* Success allows the user to login with that key. It is thus <ins>*VERY important*</ins> that your script does not blindly exit with a code of 0, or the user will be able to login as the user.
 
-Your script has the option of outputting ssh options in the same format as @authorized_keys@. These options are printed to standard out. You must print only the options without any whitespace or newlines at the end (i.e., in Ruby, use @print@ not @puts@). A valid option string might be @command="gitosis-serve jd",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty@. Outputting invalid options (or a newline) will result in the user's key being rejected, regardless of your exit code. Lastly, your scripts output will be entirely ignored if the exit code is not 0.
+Your script has the option of outputting ssh options in the same format as @authorized_keys@. These options are printed to standard out. You must print only the options without any whitespace or newlines at the end (i.e., in Ruby, use @print@ not @puts@). A valid option string might be @command="gitosis-serve jd",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty@. Outputting invalid options (or a newline) will result in the user's key being rejected, regardless of your exit code. Additionally, your scripts output will be entirely ignored if the exit code is not 0.
 
 You should write your script to timeout and exit (with a status code of 1) after some number of seconds, otherwise the sshd session will hang waiting for your script to return. This should not affect the overall sshd daemon, but might leave forked sessions hung, requiring sshd to be restarted.
 
