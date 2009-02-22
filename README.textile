@@ -8,7 +8,7 @@ We welcome audits and improvements to the patch (we're not expert C hackers). Th
 
 h2. Security
 
-It should be said that it is unwise to do this; in addition to trusting a script you write with user authentication, the patch is written by some guy in <strike>his parent's basement</strike> Boston who, while obviously extremely awesome, does not trust himself with the security of your server. If you're going to run this hack, it is recommended you run this in a @chroot@ jail. As such, we *strongly advise against using this patched version of sshd for the main sshd on your server* - run a normal install of sshd on a non-standard port.
+It should be said that it is unwise to do this; in addition to trusting a script you write with user authentication, the patch is written by some guy in Boston who, while obviously extremely awesome, does not trust himself with the security of your server. If you're going to run this hack, it is recommended you run this in a @chroot@ jail. As such, we *strongly advise against using this patched version of sshd for the main sshd on your server* - run a normal install of sshd on a non-standard port.
 
 In summary: <ins>*USE THIS PATCH AT YOUR OWN RISK.*</ins>
 
